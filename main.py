@@ -3,7 +3,7 @@ import json
 
 INPUT_FILES_PATH = "./test_input_files"
 USAGE_REPORT_FILEPATH = f'{INPUT_FILES_PATH}/Sample_Report.csv'
-PARTNER_TO_PRODUCT_MAP_FILEPATH = f'{INPUT_FILES_PATH}/typemap.json'
+PARTNUMBER_TO_PRODUCT_MAP_FILEPATH = f'{INPUT_FILES_PATH}/typemap.json'
 
 OUTPUT_FILES_PATH = "./test_output_files"
 
@@ -37,7 +37,7 @@ def prepare_inserts(usage_report_filepath):
     # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
     # - Keep only alphanumeric characters
     # - If length is not equal to 32: throw error? Or log error and skip that row? Throwing error for now
-    def mapToAlphanum(input_str):
+    def map_to_alphanum(input_str):
         # TODO: consider refactoring to use regex?
         result = ""
         for char in input_str:
@@ -47,8 +47,7 @@ def prepare_inserts(usage_report_filepath):
         if len(result) != 32:
             raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
         return result
-    df['partnerPurchasedPlanID'] = df['accountGuid'].map(mapToAlphanum)
-    print(df.head(5));
+    df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_to_alphanum)
 
     # ### ============== CHARGEABLE ============== ###
     # Create a copy of the dataframe to apply filters only for `chargeable` table
@@ -76,19 +75,24 @@ def prepare_inserts(usage_report_filepath):
 
     # chargeable_df: 3909
 
+    # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
+    # - Load `typemap.json`
+    with open(PARTNUMBER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
+        partnumber_to_product_map = json.load(f)
+        # TODO: handle error if there's any failure in loading the JSON file
+    assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
+    # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
+    chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
+    print(chargeable_df.head(5))
+
+    # chargeable_df: 3909
+    
     # Debug:
     print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df))
     df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
     chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
     itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
-
-    # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
-    # - Load `typemap.json`
-    with open(PARTNER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
-        partner_to_product_map = json.load(f)
-        # TODO: handle error if there's any failure in loading the JSON file
-    # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     
     # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     # Output stats of running totals over 'itemCount' for each of the products in a success log
