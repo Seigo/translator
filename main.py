@@ -58,14 +58,18 @@ def prepare_inserts(usage_report_filepath):
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
     no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
     chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
-    
+
+    # Log an error and skip entries: with non-positive 'itemCount'
+    itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0]
+    chargeable_df = chargeable_df[chargeable_df['itemCount'] >= 0]
+
     # Debug:
-    print(len(df), len(chargeable_df), len(no_partnumber_error_df))
+    print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df))
     df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
     chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
+    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
 
-    # Log an error and skip entries: with non-positive 'itemCount'
     # Skip any entries where the value of PartnerID matches a configurable list of 'PartnerID' [Note:  for the purpose of this exercise the list of PartnerIDs to skip contains just 26392]
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
     # - Load `typemap.json`
