@@ -19,7 +19,6 @@ def prepare_inserts(usage_report_filepath):
     df = pd.read_csv(usage_report_filepath)
 
     # Filter out unnecessary columns to work with smaller dataframe
-    print(df.columns)
     df = df[[
         'PartnerID', 
         # 'partnerGuid', 'accountid', 
@@ -29,13 +28,24 @@ def prepare_inserts(usage_report_filepath):
         # 'itemname', 'plan', 'itemType', 
         'PartNumber', 'itemCount'
     ]]
-    print(df.head(5));
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
     # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
     # - Keep only alphanumeric characters
-    # - If length is not equal to 32: throw error? Or log error and skip that row?
+    # - If length is not equal to 32: throw error? Or log error and skip that row? Throwing error for now
+    def mapToAlphanum(input_str):
+        # TODO: consider refactoring to use regex?
+        result = ""
+        for char in input_str:
+            if char.isalnum():
+                result = result + char
+        # make sure the string has length 32
+        if len(result) != 32:
+            raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
+        return result
+    df['partnerPurchasedPlanID'] = df['accountGuid'].map(mapToAlphanum)
+    print(df.head(5));
 
     # ### ============== CHARGEABLE ============== ###
     # Log an error and skip entries: without 'PartNumber'
@@ -44,7 +54,7 @@ def prepare_inserts(usage_report_filepath):
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
     # - Load `typemap.json`
     with open(PARTNER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
-        partner_to_product_map = json.load(file)
+        partner_to_product_map = json.load(f)
         # TODO: handle error if there's any failure in loading the JSON file
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     
