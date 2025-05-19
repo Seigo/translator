@@ -1,9 +1,11 @@
 import pandas as pd
 import json
 
-path_to_input_files = "./test_input_files"
-USAGE_REPORT_FILEPATH = f'{path_to_input_files}/Sample_Report.csv'
-PARTNER_TO_PRODUCT_MAP_FILEPATH = f'{path_to_input_files}/typemap.json'
+INPUT_FILES_PATH = "./test_input_files"
+USAGE_REPORT_FILEPATH = f'{INPUT_FILES_PATH}/Sample_Report.csv'
+PARTNER_TO_PRODUCT_MAP_FILEPATH = f'{INPUT_FILES_PATH}/typemap.json'
+
+OUTPUT_FILES_PATH = "./test_output_files"
 
 PARTNER_IDS_TO_SKIP = [26392]
 
@@ -48,7 +50,21 @@ def prepare_inserts(usage_report_filepath):
     print(df.head(5));
 
     # ### ============== CHARGEABLE ============== ###
+    # Create a copy of the dataframe to apply filters only for `chargeable` table
+    chargeable_df = df.copy()
+    print(len(df), len(chargeable_df))
+    
     # Log an error and skip entries: without 'PartNumber'
+    # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
+    no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
+    chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
+    
+    # Debug:
+    print(len(df), len(chargeable_df), len(no_partnumber_error_df))
+    df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
+    chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
+    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
+
     # Log an error and skip entries: with non-positive 'itemCount'
     # Skip any entries where the value of PartnerID matches a configurable list of 'PartnerID' [Note:  for the purpose of this exercise the list of PartnerIDs to skip contains just 26392]
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
