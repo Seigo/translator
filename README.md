@@ -13,6 +13,13 @@ source .venv/bin/activate
 pip install .
 ```
 
+On your terminal, setup local test DB
+
+```shell
+# TODO: docker compose
+# TODO: how to setup `chargeable` and `domains` table
+```
+
 ## Run project
 
 Run with `python main.py`
