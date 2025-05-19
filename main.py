@@ -10,6 +10,13 @@ OUTPUT_FILES_PATH = "./test_output_files"
 # TODO: lookup best practices on environment variables or similar
 PARTNER_IDS_TO_SKIP = [26392]
 
+ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
+    'EA000001GB0O': 1000,
+    'PMQ00005GB0R': 5000,
+    'SSX006NR': 1000,
+    'SPQ00001MB0R': 2000
+}
+
 # Dummy error logger
 error_logs = []
 def log_error(error_string):
@@ -83,7 +90,18 @@ def prepare_inserts(usage_report_filepath):
     assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
-    print(chargeable_df.head(5))
+
+    # chargeable_df: 3909
+
+    # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
+    assert type(ITEMCOUNT_TO_USAGE_REDUCTION_RULES) is dict, "ITEMCOUNT_TO_USAGE_REDUCTION_RULES is not a dictionary"
+    def map_itemcount_to_usage(row): 
+        result = row['itemCount']
+        key = row['PartNumber']
+        if key in ITEMCOUNT_TO_USAGE_REDUCTION_RULES:
+            result = result / ITEMCOUNT_TO_USAGE_REDUCTION_RULES[key]
+        return result
+    chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
     # chargeable_df: 3909
     
@@ -94,7 +112,6 @@ def prepare_inserts(usage_report_filepath):
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
     itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
     
-    # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     # Output stats of running totals over 'itemCount' for each of the products in a success log
     # Bonus: validate and escape inputs to secure against SQL injection
     # Prepare SQL inserts for `chargeable` table
