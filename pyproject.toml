@@ -1,0 +1,28 @@
+[project]
+name = "Translator"
+version = "0.0.1"
+authors = [
+  { name="Guilherme Seigo Osawa", email="guilhermeosawa@gmail.com" },
+]
+description = "Translator project for Ntirety test"
+readme = "README.md"
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+dependencies = [
+  "pandas"
+]
+
+[project.urls]
+Homepage = "https://github.com/pypa/sampleproject"
+Issues = "https://github.com/pypa/sampleproject/issues"
+
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
