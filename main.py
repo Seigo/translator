@@ -24,8 +24,7 @@ def escape_string_value(value):
         result = ""
         for char in value:
             if char == "'":
-                # result += "''" # escape single quote that can cause SQL injection
-                result += char
+                result += "''" # escape single quote that can cause SQL injection
             else:
                 result += char
         return f"'{result}'" # add single quotes around string value
@@ -122,12 +121,15 @@ def prepare_inserts(usage_report_filepath):
         # plan: varchar
         # usage: int
     with open(f'{OUTPUT_FILES_PATH}/insert_into_chargeable.sql', "w") as f:
-        start_of_query = 'INSERT INTO chargeable ("partnerID", "product", "partnerPurchasedPlanID", "plan", "usage") VALUES'
+        columns = ["partnerID", "product", "partnerPurchasedPlanID", "plan", "usage"]
+        columns = list(map(lambda c: f'"{c}"', columns))
+        start_of_query = f'INSERT INTO chargeable ({', '.join(columns)}) VALUES'
         row_array = []
         for _, row in chargeable_df.iterrows():
             usage = int(row['usage']) # TODO: int() does a floor function, is that what we want?
-            # TODO: escape strings to prevent SQL injection (see more: https://stackoverflow.com/questions/71604741/sql-sanitize-python)
-            row_query = f"({row['PartnerID']}, '{row['product']}', '{row['partnerPurchasedPlanID']}', '{row['plan']}', {usage})"
+            values = [row['PartnerID'], row['product'], row['partnerPurchasedPlanID'], row['plan'], usage]
+            values = list(map(escape_string_value, values))
+            row_query = f"({', '.join(values)})"
             row_array.append(row_query)
 
         f.write(start_of_query + '\n')
@@ -175,10 +177,6 @@ def prepare_inserts(usage_report_filepath):
         start_of_query = f'INSERT INTO domains ({', '.join(prepared_columns)}) VALUES'
         row_array = []
         for _, row in domains_df.iterrows():
-            if row['partnerPurchasedPlanID'] == '799ef0ab443841578afcf6fc4dfe9253':
-                print('Forcing row to be SQL Injection')
-                row['partnerPurchasedPlanID'] = "799ef'; DELETE FROM domains; --0ab443841578afcf6fc4dfe9253"
-                # turn into SQL injection? '; DROP TABLE chargeable; -- 
             values = [row['partnerPurchasedPlanID'], row['domains']]
             prepared_values = list(map(escape_string_value, values))
             
