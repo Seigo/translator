@@ -25,10 +25,11 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
 # - If length is not equal to 32: throw error? Or log error and skip that row? Throwing error for now
 def map_partner_purchased_plan_id(input_str):
     # TODO: consider refactoring to use regex?
-    result = ""
+    result = []
     for char in input_str:
         if char.isalnum():
-            result = result + char
+            result.append(char)
+    result = ''.join(result)
     # make sure the string has length 32
     if len(result) != 32:
         raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
