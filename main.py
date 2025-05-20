@@ -17,6 +17,7 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
     'SPQ00001MB0R': 2000
 }
 
+# Bonus: validate and escape inputs to secure against SQL injection
 # TODO: extract this to an utils, or use a more established library
 # TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
 def escape_string_value(value):
@@ -30,8 +31,6 @@ def escape_string_value(value):
         return f"'{result}'" # add single quotes around string value
     else:
         return str(value)
-
-print('Initializing the Translator')
 
 def prepare_inserts(usage_report_filepath):
     # Read Sample Report CSV
@@ -70,6 +69,7 @@ def prepare_inserts(usage_report_filepath):
     df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_to_alphanum)
 
     # ### ============== CHARGEABLE ============== ###
+
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
     print(len(df), len(chargeable_df))
@@ -94,6 +94,8 @@ def prepare_inserts(usage_report_filepath):
     assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
+    # - Filter out if there's no mapping for a PartNumber (e.g: MOL001NR)
+    chargeable_df = chargeable_df[chargeable_df['product'].notna()]
 
     # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     assert type(ITEMCOUNT_TO_USAGE_REDUCTION_RULES) is dict, "ITEMCOUNT_TO_USAGE_REDUCTION_RULES is not a dictionary"
@@ -105,7 +107,6 @@ def prepare_inserts(usage_report_filepath):
         return result
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
-    # TODO Bonus: validate and escape inputs to secure against SQL injection
     # Output stats of running totals over 'itemCount' for each of the products in a success log
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
@@ -140,33 +141,16 @@ def prepare_inserts(usage_report_filepath):
     # Create a `domains` dataframe
     domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
 
-    print('domains', len(domains_df))
-
     # Record the Domain associated with the partnerPurchasedPlanID in the table
     # - Ok, already done in the section that are COMMON between Chargeable and Domains
     # - Assuming this means that we need rows to have partnerPurchasedPlanID, then let's filter to ensure that
     domains_df = domains_df[domains_df['partnerPurchasedPlanID'].notna()]
     domains_df = domains_df[domains_df['domains'].notna()] # TODO: would it be better to do these 2 lines in one?
 
-    print('domains', len(domains_df))
-    domains_df.to_csv(f'{OUTPUT_FILES_PATH}/domains_w_duplicates_df.csv')
-
     # Ensure only distinct domain names are recorded in the 'domains' table
     # - TODO: do we want to ensure that the duplicates have the same `partnerPurchasedPlanID`?
     domains_df = domains_df.drop_duplicates(keep='first', subset=['domains'])
-
-    print('domains', len(domains_df))
-
-    # Debug:
-    print(len(df), len(chargeable_df), len(domains_df))
-    df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
-    chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
-    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
-    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
-    domains_df.to_csv(f'{OUTPUT_FILES_PATH}/domains_df.csv')
     
-
-    # TODO Bonus: validate and escape inputs to secure against SQL injection
     # Prepare SQL inserts for `domains` table
         # id: int auto-increment
         # partnerPurchasedPlanID: varchar
@@ -186,6 +170,11 @@ def prepare_inserts(usage_report_filepath):
         f.write(start_of_query + '\n')
         f.write(',\n'.join(row_array) + '\n')
         f.write(';\n') # end_of_query
+    
+    # ### ============== Output error logs ============== ###
+    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
+    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
 
-inserts = prepare_inserts(USAGE_REPORT_FILEPATH)
-# Write `inserts` to an output file
+print('Initializing the Translator')
+prepare_inserts(USAGE_REPORT_FILEPATH)
+
