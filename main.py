@@ -17,6 +17,21 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
     'SPQ00001MB0R': 2000
 }
 
+# Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
+# - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
+# - Keep only alphanumeric characters
+# - If length is not equal to 32: throw error? Or log error and skip that row? Throwing error for now
+def map_partner_purchased_plan_id(input_str):
+    # TODO: consider refactoring to use regex?
+    result = ""
+    for char in input_str:
+        if char.isalnum():
+            result = result + char
+    # make sure the string has length 32
+    if len(result) != 32:
+        raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
+    return result
+
 # Bonus: validate and escape inputs to secure against SQL injection
 # TODO: extract this to an utils, or use a more established library
 # TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
@@ -52,21 +67,9 @@ def prepare_inserts(usage_report_filepath):
     # maybe we rename it to 'domain'?
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
+
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
-    # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
-    # - Keep only alphanumeric characters
-    # - If length is not equal to 32: throw error? Or log error and skip that row? Throwing error for now
-    def map_to_alphanum(input_str):
-        # TODO: consider refactoring to use regex?
-        result = ""
-        for char in input_str:
-            if char.isalnum():
-                result = result + char
-        # make sure the string has length 32
-        if len(result) != 32:
-            raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
-        return result
-    df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_to_alphanum)
+    df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_partner_purchased_plan_id)
 
     # ### ============== CHARGEABLE ============== ###
 
@@ -138,6 +141,7 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
 
     # ### ============== DOMAINS ============== ###
+    
     # Create a `domains` dataframe
     domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
 
