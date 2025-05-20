@@ -19,6 +19,7 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
 }
 # ### ============== ENVIRONMENT VARIABLES (end) ============== ###
 
+# Complexity: time O(2n), space O(2n)
 # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
 # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
 # - Keep only alphanumeric characters
@@ -35,17 +36,19 @@ def map_partner_purchased_plan_id(input_str):
         raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
     return result
 
+# Complexity: time O(n), space O(n)
 # Bonus: validate and escape inputs to secure against SQL injection
 # TODO: extract this to an utils, or use a more established library
 # TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
 def escape_string_value(value):
     if type(value) is str:
-        result = ""
+        result = []
         for char in value:
             if char == "'":
-                result += "''" # escape single quote that can cause SQL injection
+                result.append("''") # escape single quote that can cause SQL injection
             else:
-                result += char
+                result.append(char)
+        result = ''.join(result)
         return f"'{result}'" # add single quotes around string value
     else:
         return str(value)
