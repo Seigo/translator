@@ -1,6 +1,6 @@
 # Translator
 
-This project generates two SQL files with an `INSERT` statement for the `chargeable` and `domains` tables
+This project generates two SQL files with an `INSERT` statement for the `chargeable` and `domains` tables.
 
 It requires an input of two files: "Usage Report" CSV and a "Product Typemap" JSON
 
