@@ -37,7 +37,7 @@ def prepare_inserts(usage_report_filepath):
        'domains', 
         # 'itemname', 'plan', 'itemType', 
         'PartNumber', 'itemCount'
-    ]]
+    ]].copy()
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
@@ -104,16 +104,24 @@ def prepare_inserts(usage_report_filepath):
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
     # chargeable_df: 3909
+
+    # TODO Bonus: validate and escape inputs to secure against SQL injection
+    # Output stats of running totals over 'itemCount' for each of the products in a success log
+    running_totals_df = chargeable_df[[
+        'product', 'itemCount'
+    ]].copy()
+    running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
+
+    # chargeable_df: 3909
     
     # Debug:
-    print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df))
+    print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df), len(running_totals_df))
     df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
     chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
     itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
+    running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv')
     
-    # Output stats of running totals over 'itemCount' for each of the products in a success log
-    # Bonus: validate and escape inputs to secure against SQL injection
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
         # partnerID: int	
