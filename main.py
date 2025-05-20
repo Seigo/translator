@@ -17,10 +17,20 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
     'SPQ00001MB0R': 2000
 }
 
-# Dummy error logger
-error_logs = []
-def log_error(error_string):
-    error_logs.append(error_string)
+# TODO: extract this to an utils, or use a more established library
+# TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
+def escape_string_value(value):
+    if type(value) is str:
+        result = ""
+        for char in value:
+            if char == "'":
+                # result += "''" # escape single quote that can cause SQL injection
+                result += char
+            else:
+                result += char
+        return f"'{result}'" # add single quotes around string value
+    else:
+        return str(value)
 
 print('Initializing the Translator')
 
@@ -40,6 +50,8 @@ def prepare_inserts(usage_report_filepath):
         # 'itemType', 
         'PartNumber', 'itemCount'
     ]].copy()
+    # The name 'domains' is confusing, since the sample input and the requirements docs make it seem like they expect only 1 domain per row
+    # maybe we rename it to 'domain'?
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
@@ -62,27 +74,18 @@ def prepare_inserts(usage_report_filepath):
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
     print(len(df), len(chargeable_df))
-    
-    # df: 13424
-    # chargeable_df: 13424
 
     # Log an error and skip entries: without 'PartNumber'
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
     no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
     chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
 
-    # chargeable_df: 4010
-
     # Log an error and skip entries: with non-positive 'itemCount'
     itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0]
     chargeable_df = chargeable_df[chargeable_df['itemCount'] >= 0]
 
-    # chargeable_df: 4008
-
     # Skip any entries where the value of PartnerID matches a configurable list of 'PartnerID' [Note:  for the purpose of this exercise the list of PartnerIDs to skip contains just 26392]
     chargeable_df = chargeable_df[~chargeable_df['PartnerID'].isin(PARTNER_IDS_TO_SKIP)]
-
-    # chargeable_df: 3909
 
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
     # - Load `typemap.json`
@@ -92,8 +95,6 @@ def prepare_inserts(usage_report_filepath):
     assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
-
-    # chargeable_df: 3909
 
     # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     assert type(ITEMCOUNT_TO_USAGE_REDUCTION_RULES) is dict, "ITEMCOUNT_TO_USAGE_REDUCTION_RULES is not a dictionary"
@@ -105,25 +106,14 @@ def prepare_inserts(usage_report_filepath):
         return result
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
-    # chargeable_df: 3909
-
     # TODO Bonus: validate and escape inputs to secure against SQL injection
     # Output stats of running totals over 'itemCount' for each of the products in a success log
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
     ]].copy()
     running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
-
-    # chargeable_df: 3909
-
-    # Debug:
-    print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df), len(running_totals_df))
-    df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
-    chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
-    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
-    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
     running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv')
-    
+
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
         # partnerID: int	
@@ -145,13 +135,59 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
 
     # ### ============== DOMAINS ============== ###
+    # Create a `domains` dataframe
+    domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
+
+    print('domains', len(domains_df))
+
     # Record the Domain associated with the partnerPurchasedPlanID in the table
+    # - Ok, already done in the section that are COMMON between Chargeable and Domains
+    # - Assuming this means that we need rows to have partnerPurchasedPlanID, then let's filter to ensure that
+    domains_df = domains_df[domains_df['partnerPurchasedPlanID'].notna()]
+    domains_df = domains_df[domains_df['domains'].notna()] # TODO: would it be better to do these 2 lines in one?
+
+    print('domains', len(domains_df))
+    domains_df.to_csv(f'{OUTPUT_FILES_PATH}/domains_w_duplicates_df.csv')
+
     # Ensure only distinct domain names are recorded in the 'domains' table
-    # Bonus: validate and escape inputs to secure against SQL injection
+    # - TODO: do we want to ensure that the duplicates have the same `partnerPurchasedPlanID`?
+    domains_df = domains_df.drop_duplicates(keep='first', subset=['domains'])
+
+    print('domains', len(domains_df))
+
+    # Debug:
+    print(len(df), len(chargeable_df), len(domains_df))
+    df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
+    chargeable_df.to_csv(f'{OUTPUT_FILES_PATH}/chargeable_df.csv')
+    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
+    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
+    domains_df.to_csv(f'{OUTPUT_FILES_PATH}/domains_df.csv')
+    
+
+    # TODO Bonus: validate and escape inputs to secure against SQL injection
     # Prepare SQL inserts for `domains` table
         # id: int auto-increment
         # partnerPurchasedPlanID: varchar
         # domain: varchar
+    with open(f'{OUTPUT_FILES_PATH}/insert_into_domains.sql', "w") as f:
+        columns = ['partnerPurchasedPlanID', 'domain']
+        prepared_columns = list(map(lambda c: f'"{c}"', columns))
+        start_of_query = f'INSERT INTO domains ({', '.join(prepared_columns)}) VALUES'
+        row_array = []
+        for _, row in domains_df.iterrows():
+            if row['partnerPurchasedPlanID'] == '799ef0ab443841578afcf6fc4dfe9253':
+                print('Forcing row to be SQL Injection')
+                row['partnerPurchasedPlanID'] = "799ef'; DELETE FROM domains; --0ab443841578afcf6fc4dfe9253"
+                # turn into SQL injection? '; DROP TABLE chargeable; -- 
+            values = [row['partnerPurchasedPlanID'], row['domains']]
+            prepared_values = list(map(escape_string_value, values))
+            
+            row_query = f"({', '.join(prepared_values)})"
+            row_array.append(row_query)
+
+        f.write(start_of_query + '\n')
+        f.write(',\n'.join(row_array) + '\n')
+        f.write(';\n') # end_of_query
 
 inserts = prepare_inserts(USAGE_REPORT_FILEPATH)
 # Write `inserts` to an output file
