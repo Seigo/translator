@@ -123,7 +123,7 @@ def prepare_inserts(usage_report_filepath):
         'product', 'itemCount'
     ]].copy()
     running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
-    running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv')
+    running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv', index=False)
 
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
@@ -184,8 +184,8 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
     
     # ### ============== Output error logs ============== ###
-    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv')
-    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv')
+    no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv', index=False)
+    itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv', index=False)
 
 print('Initializing the Translator')
 prepare_inserts(USAGE_REPORT_FILEPATH)
