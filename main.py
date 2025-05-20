@@ -35,7 +35,9 @@ def prepare_inserts(usage_report_filepath):
         'accountGuid', 
         # 'username',
        'domains', 
-        # 'itemname', 'plan', 'itemType', 
+        # 'itemname', 
+        'plan',
+        # 'itemType', 
         'PartNumber', 'itemCount'
     ]].copy()
 
@@ -113,7 +115,7 @@ def prepare_inserts(usage_report_filepath):
     running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
 
     # chargeable_df: 3909
-    
+
     # Debug:
     print(len(df), len(chargeable_df), len(no_partnumber_error_df), len(itemcount_negative_error_df), len(running_totals_df))
     df.to_csv(f'{OUTPUT_FILES_PATH}/df.csv')
@@ -129,6 +131,18 @@ def prepare_inserts(usage_report_filepath):
         # partnerPurchasedPlanID: varchar
         # plan: varchar
         # usage: int
+    with open(f'{OUTPUT_FILES_PATH}/insert_into_chargeable.sql', "w") as f:
+        start_of_query = 'INSERT INTO chargeable ("partnerID", "product", "partnerPurchasedPlanID", "plan", "usage") VALUES'
+        row_array = []
+        for _, row in chargeable_df.iterrows():
+            usage = int(row['usage']) # TODO: int() does a floor function, is that what we want?
+            # TODO: escape strings to prevent SQL injection (see more: https://stackoverflow.com/questions/71604741/sql-sanitize-python)
+            row_query = f"({row['PartnerID']}, '{row['product']}', '{row['partnerPurchasedPlanID']}', '{row['plan']}', {usage})"
+            row_array.append(row_query)
+
+        f.write(start_of_query + '\n')
+        f.write(',\n'.join(row_array) + '\n')
+        f.write(';\n') # end_of_query
 
     # ### ============== DOMAINS ============== ###
     # Record the Domain associated with the partnerPurchasedPlanID in the table
