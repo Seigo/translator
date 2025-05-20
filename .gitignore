@@ -4,5 +4,5 @@ __pycache__/
 
 build
 
-test_input_files
-test_output_files
+input_files/*
+output_files/*

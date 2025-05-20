@@ -1,11 +1,12 @@
 import pandas as pd
 import json
 
-INPUT_FILES_PATH = "./test_input_files"
+# ### ============== ENVIRONMENT VARIABLES ============== ###
+INPUT_FILES_PATH = "./input_files"
 USAGE_REPORT_FILEPATH = f'{INPUT_FILES_PATH}/Sample_Report.csv'
 PARTNUMBER_TO_PRODUCT_MAP_FILEPATH = f'{INPUT_FILES_PATH}/typemap.json'
 
-OUTPUT_FILES_PATH = "./test_output_files"
+OUTPUT_FILES_PATH = "./output_files"
 
 # TODO: lookup best practices on environment variables or similar
 PARTNER_IDS_TO_SKIP = [26392]
@@ -16,6 +17,7 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
     'SSX006NR': 1000,
     'SPQ00001MB0R': 2000
 }
+# ### ============== ENVIRONMENT VARIABLES (end) ============== ###
 
 # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
 # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
@@ -48,9 +50,11 @@ def escape_string_value(value):
         return str(value)
 
 def prepare_inserts(usage_report_filepath):
+    # Complexity: time O(n), space O(n)
     # Read Sample Report CSV
     df = pd.read_csv(usage_report_filepath)
 
+    # Complexity: time O(n), space O(n)
     # Filter out unnecessary columns to work with smaller dataframe
     df = df[[
         'PartnerID', 
@@ -68,15 +72,18 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
 
+    # Complexity: time O(n * m (where m is the accountGuid string size)), space O(1)
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
     df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_partner_purchased_plan_id)
 
     # ### ============== CHARGEABLE ============== ###
 
+    # Complexity: time O(n), space O(n)
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
-    print(len(df), len(chargeable_df))
 
+    # Complexity: time O(n), space O(n)
+    # Complexity: time O(n), space O(1) since no new space was needed
     # Log an error and skip entries: without 'PartNumber'
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
     no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
@@ -111,6 +118,7 @@ def prepare_inserts(usage_report_filepath):
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
     # Output stats of running totals over 'itemCount' for each of the products in a success log
+    # - TODO: ask: should this table be ordered in a specific way to make more sense of the running totals?
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
     ]].copy()
@@ -141,7 +149,7 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
 
     # ### ============== DOMAINS ============== ###
-    
+
     # Create a `domains` dataframe
     domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
 
