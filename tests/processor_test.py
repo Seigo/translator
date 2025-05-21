@@ -4,7 +4,7 @@ Tests for the FileProcessor class from the processor module.
 This file covers:
 - Validation of required columns in DataFrames.
 - Loading the partnumber-to-product mapping from a JSON file.
-- Writing running totals and error logs to output files.
+- Writing totals by Product and error logs to output files.
 - Full processing flow, including generation of all expected output files.
 """
 
@@ -62,17 +62,17 @@ def test_load_partnumber_to_product_map(processor):
     assert isinstance(mapping, dict)
     assert "A" in mapping
 
-def test_write_running_totals_creates_file(processor, tmp_path):
-    """Test that running totals CSV file is created and contains expected columns."""
+def test_write_totals_by_product_creates_file(processor, tmp_path):
+    """Test that totals_by_product CSV file is created and contains expected columns."""
     df = pd.DataFrame({
         "product": ["A", "B", "A"],
         "itemCount": [10, 20, 30]
     })
-    processor._write_running_totals(df)
-    output_file = os.path.join(processor.output_files_path, "running_totals_df.csv")
+    processor._write_totals_by_product(df)
+    output_file = os.path.join(processor.output_files_path, "totals_by_product.csv")
     assert os.path.exists(output_file)
     out_df = pd.read_csv(output_file)
-    assert "running_total" in out_df.columns
+    assert "itemCount" in out_df.columns
 
 def test_write_error_logs_creates_files(processor, tmp_path):
     """Test that error log CSV files are created."""
@@ -105,6 +105,6 @@ def test_process_full_flow(processor, tmp_path):
         headers=["PartnerID", "accountGuid", "domains", "plan", "PartNumber", "itemCount"]
     )
     # Check if output files were created
-    assert os.path.exists(os.path.join(processor.output_files_path, "running_totals_df.csv"))
+    assert os.path.exists(os.path.join(processor.output_files_path, "totals_by_product.csv"))
     assert os.path.exists(os.path.join(processor.output_files_path, "insert_into_chargeable.sql"))
     assert os.path.exists(os.path.join(processor.output_files_path, "insert_into_domains.sql"))

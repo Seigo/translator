@@ -95,7 +95,7 @@ output/
 ├─ insert_into_domains.sql
 ├─ itemcount_nonpositive_error_df.csv
 ├─ no_partnumber_error_df.csv
-├─ running_totals_df.csv
+├─ totals_by_product.csv
 ```
 
 ---

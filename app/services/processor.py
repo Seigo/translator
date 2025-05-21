@@ -57,7 +57,7 @@ class FileProcessor:
         chargeable_df, no_partnumber_error_df, itemcount_nonpositive_error_df = filter_chargeable_df(df, partner_ids_to_skip)
         chargeable_df = apply_product_mapping(chargeable_df, self.partnumber_to_product_map)
         chargeable_df = apply_usage_reduction(chargeable_df, itemcount_to_usage_reduction_rules)
-        self._write_running_totals(chargeable_df)
+        self._write_totals_by_product(chargeable_df)
         SQLGenerator.write_chargeable_sql(chargeable_df, self.output_files_path)
         self._write_error_logs(no_partnumber_error_df, itemcount_nonpositive_error_df)
 
@@ -79,15 +79,21 @@ class FileProcessor:
             logger.error("Failed to load mapping: %s", e)
             raise RuntimeError(f"Failed to load mapping: {e}")
 
-    def _write_running_totals(self, chargeable_df: pd.DataFrame) -> None:
-        """Write running totals of itemCount per product to CSV."""
+    def _write_totals_by_product(self, chargeable_df: pd.DataFrame) -> None:
+        """
+            Write running totals of itemCount per product to CSV.
+
+            Note: the concept of "Running totals" don't match well with the stated problem
+            so I took the liberty of changing it to "Totals grouped by Product"
+        """
         try:
-            running_totals_df = chargeable_df[['product', 'itemCount']].copy()
-            running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
-            running_totals_df.to_csv(f'{self.output_files_path}/running_totals_df.csv', index=False)
-            logger.info("Running totals written to %s/running_totals_df.csv", self.output_files_path)
+            totals_by_product_df = chargeable_df[['product', 'itemCount']].copy()
+            totals_by_product_df = totals_by_product_df.groupby('product')['itemCount'].sum()
+            totals_by_product_df.to_csv(f'{self.output_files_path}/totals_by_product.csv', index=True)
+
+            logger.info("Totals by Product written to %s/totals_by_product.csv", self.output_files_path)
         except Exception as e:
-            logger.error("Failed to write running totals: %s", e)
+            logger.error("Failed to write totals_by_product: %s", e)
             raise
 
     def _write_error_logs(
