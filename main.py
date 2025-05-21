@@ -19,7 +19,7 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
 }
 # ### ============== ENVIRONMENT VARIABLES (end) ============== ###
 
-# Complexity: time O(2n), space O(2n)
+# Inner fn costs (using other name to not count it twice): time O(2n), space O(2n)
 # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
 # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
 # - Keep only alphanumeric characters
@@ -36,7 +36,7 @@ def map_partner_purchased_plan_id(input_str):
         raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
     return result
 
-# Complexity: time O(n), space O(n)
+# Inner fn costs (using other name to not count it twice): time O(2n) if string and O(1) otherwise, space O(2n) if string and O(s) otherwise (where s is the size of the string that the value was transformed into)
 # Bonus: validate and escape inputs to secure against SQL injection
 # TODO: extract this to an utils, or use a more established library
 # TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
@@ -53,6 +53,12 @@ def escape_string_value(value):
     else:
         return str(value)
 
+# Given:
+# - n: Usage Report row count
+# - a: AccountGuid string size
+# - d: PartnerID denylist size
+# - x: size of each `chargeable_df` value as string
+# Complexity up to generating SQL for chargeable: 15n + na + nd + 10nx
 def prepare_inserts(usage_report_filepath):
     # Complexity: time O(n), space O(n)
     # Read Sample Report CSV
@@ -71,8 +77,6 @@ def prepare_inserts(usage_report_filepath):
         # 'itemType', 
         'PartNumber', 'itemCount'
     ]].copy()
-    # The name 'domains' is confusing, since the sample input and the requirements docs make it seem like they expect only 1 domain per row
-    # maybe we rename it to 'domain'?
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
 
@@ -82,53 +86,62 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== CHARGEABLE ============== ###
 
-    # Complexity: time O(n), space O(n)
+    # Complexity: time O(n), space O(2n)
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
 
-    # Complexity: time O(n), space O(n)
-    # Complexity: time O(n), space O(1) since no new space was needed
+    # Complexity no_partnumber_error_df: time O(n), space O(2n)
+    # Complexity chargeable_df: time O(n), space O(1) since no new space was needed (is it really? How does the Dataframe handle the filtering?)
     # Log an error and skip entries: without 'PartNumber'
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
     no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
     chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
 
+    # Complexity itemcount_negative_error_df: time O(n), space O(2n)
+    # Complexity chargeable_df: time O(n), space O(1) since no new space was needed
     # Log an error and skip entries: with non-positive 'itemCount'
     itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0]
     chargeable_df = chargeable_df[chargeable_df['itemCount'] >= 0]
 
+    # Complexity: time O(n * m) where m is the size of the denylist, space O(1) since no new space was needed
     # Skip any entries where the value of PartnerID matches a configurable list of 'PartnerID' [Note:  for the purpose of this exercise the list of PartnerIDs to skip contains just 26392]
     chargeable_df = chargeable_df[~chargeable_df['PartnerID'].isin(PARTNER_IDS_TO_SKIP)]
 
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
+    # Complexity: time O(n), space O(n)
     # - Load `typemap.json`
     with open(PARTNUMBER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
         partnumber_to_product_map = json.load(f)
         # TODO: handle error if there's any failure in loading the JSON file
     assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
+    # Complexity: time O(n * 1) -> multiplied by constant because it is a dict lookup, space O(1) since no new space is allocated
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
+    # Complexity: time O(n), space O(1) since no new space is allocated
     # - Filter out if there's no mapping for a PartNumber (e.g: MOL001NR)
     chargeable_df = chargeable_df[chargeable_df['product'].notna()]
 
     # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     assert type(ITEMCOUNT_TO_USAGE_REDUCTION_RULES) is dict, "ITEMCOUNT_TO_USAGE_REDUCTION_RULES is not a dictionary"
+    # Complexity: time O(1), space O(1)
     def map_itemcount_to_usage(row): 
         result = row['itemCount']
         key = row['PartNumber']
         if key in ITEMCOUNT_TO_USAGE_REDUCTION_RULES:
             result = result / ITEMCOUNT_TO_USAGE_REDUCTION_RULES[key]
         return result
+    # Complexity: time O(n * 1), space O(n) for new column `product`
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
+    # Complexity: time O(3n), space O(2n)
     # Output stats of running totals over 'itemCount' for each of the products in a success log
-    # - TODO: ask: should this table be ordered in a specific way to make more sense of the running totals?
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
     ]].copy()
     running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
     running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv', index=False)
 
+    # Complexity: time O(n * 10x + n) -- where x is the size of each value as string, space O(1 + 5x)
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
         # partnerID: int	
