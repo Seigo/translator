@@ -115,8 +115,8 @@ def prepare_inserts(usage_report_filepath):
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
     ]].copy()
-    running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
-    running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv', index=False)
+    running_totals_df = running_totals_df.groupby('product')['itemCount'].sum()
+    running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/totals_by_product.csv', index=True)
 
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
