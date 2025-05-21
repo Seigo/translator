@@ -19,7 +19,6 @@ ITEMCOUNT_TO_USAGE_REDUCTION_RULES = {
 }
 # ### ============== ENVIRONMENT VARIABLES (end) ============== ###
 
-# Inner fn costs (using other name to not count it twice): time O(2n), space O(2n)
 # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
 # - Sample: 799ef0ab-4438-4157-8afc-f6fc4dfe9253
 # - Keep only alphanumeric characters
@@ -36,7 +35,6 @@ def map_partner_purchased_plan_id(input_str):
         raise Exception('Every partnerPurchasedPlanID should have 32 characters. Found: ' + result)
     return result
 
-# Inner fn costs (using other name to not count it twice): time O(2n) if string and O(1) otherwise, space O(2n) if string and O(s) otherwise (where s is the size of the string that the value was transformed into)
 # Bonus: validate and escape inputs to secure against SQL injection
 # TODO: extract this to an utils, or use a more established library
 # TODO: This implementation is basic. For more on SQL injection: https://stackoverflow.com/questions/71604741/sql-sanitize-python
@@ -54,11 +52,9 @@ def escape_string_value(value):
         return str(value)
 
 def prepare_inserts(usage_report_filepath):
-    # Complexity: time O(n), space O(n)
     # Read Sample Report CSV
     df = pd.read_csv(usage_report_filepath)
 
-    # Complexity: time O(n), space O(n)
     # Filter out unnecessary columns to work with smaller dataframe
     df = df[[
         'PartnerID', 
@@ -74,60 +70,47 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== COMMON between Chargeable and Domains ============== ###
 
-    # Complexity: time O(n * m (where m is the accountGuid string size)), space O(1)
     # Map 'accountGuid' to 'partnerPurchasedPlanID' as alphanumeric string of length 32 and should strip any non-alphanumeric characters before insert.
     df['partnerPurchasedPlanID'] = df['accountGuid'].map(map_partner_purchased_plan_id)
 
     # ### ============== CHARGEABLE ============== ###
 
-    # Complexity: time O(n), space O(n)
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
 
-    # Complexity no_partnumber_error_df: time O(n), space O(n)
-    # Complexity chargeable_df: time O(n), space O(1) since no new space was needed (is it really? How does the Dataframe handle the filtering?)
     # Log an error and skip entries: without 'PartNumber'
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
     no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()].copy() # deep=True is default
     chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
 
-    # Complexity itemcount_negative_error_df: time O(n), space O(n)
-    # Complexity chargeable_df: time O(n), space O(1) since no new space was needed
     # Log an error and skip entries: with non-positive 'itemCount'
     itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0].copy()
     chargeable_df = chargeable_df[chargeable_df['itemCount'] >= 0]
 
-    # Complexity: time O(n * m) where m is the size of the denylist, space O(1) since no new space was needed
     # Skip any entries where the value of PartnerID matches a configurable list of 'PartnerID' [Note:  for the purpose of this exercise the list of PartnerIDs to skip contains just 26392]
     chargeable_df = chargeable_df[~chargeable_df['PartnerID'].isin(PARTNER_IDS_TO_SKIP)]
 
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
-    # Complexity: time O(j) where j is the JSON file size, space O(j)
     # - Load `typemap.json`
     with open(PARTNUMBER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
         partnumber_to_product_map = json.load(f)
         # TODO: handle error if there's any failure in loading the JSON file
     assert type(partnumber_to_product_map) is dict, "PARTNUMBER_TO_PRODUCT_MAP_FILEPATH is not a dictionary"
-    # Complexity: time O(n * 1) -> multiplied by constant because it is a dict lookup, space O(1) since no new space is allocated
     # - Map 'PartNumber' in the csv to the 'product' column (e.g: PartNumber 'ADS000010U0R' to product 'core.chargeable.adsync')
     chargeable_df['product'] = chargeable_df['PartNumber'].map(partnumber_to_product_map)
-    # Complexity: time O(n), space O(1) since no new space is allocated
     # - Filter out if there's no mapping for a PartNumber (e.g: MOL001NR)
     chargeable_df = chargeable_df[chargeable_df['product'].notna()]
 
     # Map 'itemCount' in csv as 'usage' in the table subject to a unit reduction rule 
     assert type(ITEMCOUNT_TO_USAGE_REDUCTION_RULES) is dict, "ITEMCOUNT_TO_USAGE_REDUCTION_RULES is not a dictionary"
-    # Complexity: time O(1), space O(1)
     def map_itemcount_to_usage(row): 
         result = row['itemCount']
         key = row['PartNumber']
         if key in ITEMCOUNT_TO_USAGE_REDUCTION_RULES:
             result = result / ITEMCOUNT_TO_USAGE_REDUCTION_RULES[key]
         return result
-    # Complexity: time O(n * 1), space O(n) for new column `product`
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
-    # Complexity: time O(3n), space O(n)
     # Output stats of running totals over 'itemCount' for each of the products in a success log
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
@@ -135,7 +118,6 @@ def prepare_inserts(usage_report_filepath):
     running_totals_df['running_total'] = running_totals_df['itemCount'].cumsum()
     running_totals_df.to_csv(f'{OUTPUT_FILES_PATH}/running_totals_df.csv', index=False)
 
-    # Complexity: time O(n * 10x + n) -- where x is the size of each value as string, space O(1 + 5x)
     # Prepare SQL inserts for `chargeable` table
         # id: int auto-increment	
         # partnerID: int	
@@ -161,24 +143,19 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== DOMAINS ============== ###
 
-    # Complexity: time O(n), space O(n)
     # Create a `domains` dataframe
     domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
 
-    # Complexity: time O(n), space O(1)
-    # Complexity: time O(n), space O(1)
     # Record the Domain associated with the partnerPurchasedPlanID in the table
     # - Ok, already done in the section that are COMMON between Chargeable and Domains
     # - Assuming this means that we need rows to have partnerPurchasedPlanID, then let's filter to ensure that
     domains_df = domains_df[domains_df['partnerPurchasedPlanID'].notna()]
     domains_df = domains_df[domains_df['domains'].notna()] # TODO: would it be better to do these 2 lines in one?
 
-    # Complexity: time O(n), space O(1)
     # Ensure only distinct domain names are recorded in the 'domains' table
     # - TODO: do we want to ensure that the duplicates have the same `partnerPurchasedPlanID`?
     domains_df = domains_df.drop_duplicates(keep='first', subset=['domains'])
     
-    # Complexity: time O(n * 4x + n) where x is the size of each value as string, space O(1 + 2x)
     # Prepare SQL inserts for `domains` table
         # id: int auto-increment
         # partnerPurchasedPlanID: varchar
@@ -200,26 +177,8 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
     
     # ### ============== Output error logs ============== ###
-    # Complexity: time O(n), space O(1)
-    # Complexity: time O(n), space O(1)
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv', index=False)
     itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv', index=False)
 
 print('Initializing the Translator')
 prepare_inserts(USAGE_REPORT_FILEPATH)
-
-# ### ============== Time-space Complexity Analysis ============== ###
-# Given:
-# - n: Usage Report CSV row count
-# - j: Product Typemap JSON key-value count
-# - d: PartnerID denylist size
-# - x: average size of each `chargeable_df` value as string
-# Time: 22n + nd + j + 14nx	
-# Space: 8n + j + 7x
-#
-# Conclusions:
-# - Overall, the complexity is linear, so it shouldn't be a big problem.. Unless the file sizes get much bigger (in which case we might also want to look into batching)
-# - The many filtering steps adds up quickly (the 22n and 8n parts) and are a great target for optimizing
-# - Denylist and JSON sizes don't have a big impact and can be de-prioritized (speculation: it doesn't seem these variables would increase too much)
-# - The SQL generation for the `chargeable` table is another great target
-# - Speculation: I imagine that "x" (sizes of values in each column) won't get too big, so we might be able to ignore it
