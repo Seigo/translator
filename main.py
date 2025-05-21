@@ -216,3 +216,10 @@ prepare_inserts(USAGE_REPORT_FILEPATH)
 # - x: average size of each `chargeable_df` value as string
 # Time: 22n + nd + j + 14nx	
 # Space: 8n + j + 7x
+#
+# Conclusions:
+# - Overall, the complexity is linear, so it shouldn't be a big problem.. Unless the file sizes get much bigger (in which case we might also want to look into batching)
+# - The many filtering steps adds up quickly (the 22n and 8n parts) and are a great target for optimizing
+# - Denylist and JSON sizes don't have a big impact and can be de-prioritized (speculation: it doesn't seem these variables would increase too much)
+# - The SQL generation for the `chargeable` table is another great target
+# - Speculation: I imagine that "x" (sizes of values in each column) won't get too big, so we might be able to ignore it
