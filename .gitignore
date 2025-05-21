@@ -1,8 +1,41 @@
+# Virtual environments
 .venv/
+venv/
+ENV/
+env/
+
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
 
-build
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
 
-input_files/*
-output_files/*
+# Input/output data
+# --> Keeping it non-ignored for this exercise
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.code-workspace
+
+# Pytest and mypy cache
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+
+# Jupyter notebook checkpoints
+*.ipynb_checkpoints
+
+# OS files
+.DS_Store
+Thumbs.db
