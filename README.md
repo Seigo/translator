@@ -108,6 +108,44 @@ All tests are located in the `tests/` folder.
 pytest -v
 ```
 
+### (optional) Create local DB for testing
+
+Create a Docker container for a local DB to test the SQL files
+
+Run it with:
+
+```bash
+docker compose up -d
+```
+
+Connect to it using any tool (like psql, DBeaver, or pgAdmin) with:
+
+```yaml
+host: localhost
+port: 5432
+user: user
+password: password
+database: testdb
+```
+
+Create the tables:
+
+```sql
+CREATE TABLE chargeable (
+    "id" SERIAL PRIMARY KEY,
+    "partnerID" INT NOT NULL,
+    "product" VARCHAR NOT NULL,
+    "partnerPurchasedPlanID" VARCHAR NOT NULL,
+    "plan" VARCHAR NOT NULL,
+    "usage" INT NOT NULL
+);
+CREATE TABLE domains (
+    "id" SERIAL PRIMARY KEY,
+    "partnerPurchasedPlanID" VARCHAR NOT NULL,
+    "domain" VARCHAR NOT NULL
+);
+```
+
 ---
 
 ## 📝 Example Inputs
