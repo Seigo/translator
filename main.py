@@ -53,12 +53,6 @@ def escape_string_value(value):
     else:
         return str(value)
 
-# Given:
-# - n: Usage Report row count
-# - a: AccountGuid string size
-# - d: PartnerID denylist size
-# - x: size of each `chargeable_df` value as string
-# Complexity up to generating SQL for chargeable: 15n + na + nd + 10nx
 def prepare_inserts(usage_report_filepath):
     # Complexity: time O(n), space O(n)
     # Read Sample Report CSV
@@ -86,21 +80,21 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== CHARGEABLE ============== ###
 
-    # Complexity: time O(n), space O(2n)
+    # Complexity: time O(n), space O(n)
     # Create a copy of the dataframe to apply filters only for `chargeable` table
     chargeable_df = df.copy()
 
-    # Complexity no_partnumber_error_df: time O(n), space O(2n)
+    # Complexity no_partnumber_error_df: time O(n), space O(n)
     # Complexity chargeable_df: time O(n), space O(1) since no new space was needed (is it really? How does the Dataframe handle the filtering?)
     # Log an error and skip entries: without 'PartNumber'
     # - TODO: add tests to verify that it catches: empty column, Null, None, other types, out of bounds
-    no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()]
+    no_partnumber_error_df = chargeable_df[chargeable_df['PartNumber'].isna()].copy() # deep=True is default
     chargeable_df = chargeable_df[chargeable_df['PartNumber'].notna()]
 
-    # Complexity itemcount_negative_error_df: time O(n), space O(2n)
+    # Complexity itemcount_negative_error_df: time O(n), space O(n)
     # Complexity chargeable_df: time O(n), space O(1) since no new space was needed
     # Log an error and skip entries: with non-positive 'itemCount'
-    itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0]
+    itemcount_negative_error_df = chargeable_df[chargeable_df['itemCount'] < 0].copy()
     chargeable_df = chargeable_df[chargeable_df['itemCount'] >= 0]
 
     # Complexity: time O(n * m) where m is the size of the denylist, space O(1) since no new space was needed
@@ -108,7 +102,7 @@ def prepare_inserts(usage_report_filepath):
     chargeable_df = chargeable_df[~chargeable_df['PartnerID'].isin(PARTNER_IDS_TO_SKIP)]
 
     # Map 'PartNumber' in the csv to the 'product' column in the 'chargeable' table based on the map in the attached typemap.json file. For example the PartNumber ADS000010U0R will be mapped to product value 'core.chargeable.adsync' for the insert.
-    # Complexity: time O(n), space O(n)
+    # Complexity: time O(j) where j is the JSON file size, space O(j)
     # - Load `typemap.json`
     with open(PARTNUMBER_TO_PRODUCT_MAP_FILEPATH, 'r') as f:
         partnumber_to_product_map = json.load(f)
@@ -133,7 +127,7 @@ def prepare_inserts(usage_report_filepath):
     # Complexity: time O(n * 1), space O(n) for new column `product`
     chargeable_df['usage'] = chargeable_df.apply(map_itemcount_to_usage, axis=1)
 
-    # Complexity: time O(3n), space O(2n)
+    # Complexity: time O(3n), space O(n)
     # Output stats of running totals over 'itemCount' for each of the products in a success log
     running_totals_df = chargeable_df[[
         'product', 'itemCount'
@@ -167,19 +161,24 @@ def prepare_inserts(usage_report_filepath):
 
     # ### ============== DOMAINS ============== ###
 
+    # Complexity: time O(n), space O(n)
     # Create a `domains` dataframe
     domains_df = df[['domains', 'partnerPurchasedPlanID']].copy()
 
+    # Complexity: time O(n), space O(1)
+    # Complexity: time O(n), space O(1)
     # Record the Domain associated with the partnerPurchasedPlanID in the table
     # - Ok, already done in the section that are COMMON between Chargeable and Domains
     # - Assuming this means that we need rows to have partnerPurchasedPlanID, then let's filter to ensure that
     domains_df = domains_df[domains_df['partnerPurchasedPlanID'].notna()]
     domains_df = domains_df[domains_df['domains'].notna()] # TODO: would it be better to do these 2 lines in one?
 
+    # Complexity: time O(n), space O(1)
     # Ensure only distinct domain names are recorded in the 'domains' table
     # - TODO: do we want to ensure that the duplicates have the same `partnerPurchasedPlanID`?
     domains_df = domains_df.drop_duplicates(keep='first', subset=['domains'])
     
+    # Complexity: time O(n * 4x + n) where x is the size of each value as string, space O(1 + 2x)
     # Prepare SQL inserts for `domains` table
         # id: int auto-increment
         # partnerPurchasedPlanID: varchar
@@ -201,9 +200,19 @@ def prepare_inserts(usage_report_filepath):
         f.write(';\n') # end_of_query
     
     # ### ============== Output error logs ============== ###
+    # Complexity: time O(n), space O(1)
+    # Complexity: time O(n), space O(1)
     no_partnumber_error_df.to_csv(f'{OUTPUT_FILES_PATH}/no_partnumber_error_df.csv', index=False)
     itemcount_negative_error_df.to_csv(f'{OUTPUT_FILES_PATH}/itemcount_negative_error_df.csv', index=False)
 
 print('Initializing the Translator')
 prepare_inserts(USAGE_REPORT_FILEPATH)
 
+# ### ============== Time-space Complexity Analysis ============== ###
+# Given:
+# - n: Usage Report CSV row count
+# - j: Product Typemap JSON key-value count
+# - d: PartnerID denylist size
+# - x: average size of each `chargeable_df` value as string
+# Time: 22n + nd + j + 14nx	
+# Space: 8n + j + 7x
